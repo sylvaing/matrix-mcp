@@ -186,3 +186,104 @@ def test_mcp_endpoint_lives_at_exactly_slash_mcp(http_app):
 def test_middleware_requires_nonempty_token():
     with pytest.raises(RuntimeError):
         BearerAuthMiddleware(lambda scope, receive, send: None, "")
+
+
+# ---- non-http ASGI scopes must not bypass auth ----
+
+
+class _RecordingApp:
+    """Inner ASGI app that records whether the middleware let a scope through."""
+
+    def __init__(self):
+        self.seen: list[str] = []
+
+    async def __call__(self, scope, receive, send):
+        self.seen.append(scope["type"])
+
+
+def _ws_scope(headers: list[tuple[bytes, bytes]]) -> dict:
+    return {"type": "websocket", "path": "/mcp", "headers": headers}
+
+
+async def test_websocket_without_bearer_is_rejected():
+    inner = _RecordingApp()
+    mw = BearerAuthMiddleware(inner, BEARER)
+    sent = []
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(message):
+        sent.append(message)
+
+    await mw(_ws_scope([]), receive, send)
+    assert inner.seen == []  # never reached the app
+    assert sent == [{"type": "websocket.close", "code": 1008}]
+
+
+async def test_websocket_with_wrong_bearer_is_rejected():
+    inner = _RecordingApp()
+    mw = BearerAuthMiddleware(inner, BEARER)
+    sent = []
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(message):
+        sent.append(message)
+
+    await mw(_ws_scope([(b"authorization", b"Bearer nope")]), receive, send)
+    assert inner.seen == []
+    assert sent == [{"type": "websocket.close", "code": 1008}]
+
+
+async def test_websocket_with_correct_bearer_passes_through():
+    inner = _RecordingApp()
+    mw = BearerAuthMiddleware(inner, BEARER)
+
+    async def receive():
+        return {"type": "websocket.connect"}
+
+    async def send(message):  # pragma: no cover - inner app sends nothing
+        pass
+
+    await mw(
+        _ws_scope([(b"authorization", f"Bearer {BEARER}".encode())]), receive, send
+    )
+    assert inner.seen == ["websocket"]
+
+
+async def test_unknown_scope_type_is_refused():
+    inner = _RecordingApp()
+    mw = BearerAuthMiddleware(inner, BEARER)
+    with pytest.raises(RuntimeError, match="refusing"):
+        await mw({"type": "gopher", "headers": []}, None, None)
+    assert inner.seen == []
+
+
+async def test_lifespan_scope_passes_through():
+    inner = _RecordingApp()
+    mw = BearerAuthMiddleware(inner, BEARER)
+    await mw({"type": "lifespan"}, None, None)
+    assert inner.seen == ["lifespan"]
+
+
+def test_unauthenticated_websocket_rejected_at_app_level(http_app):
+    from starlette.websockets import WebSocketDisconnect
+
+    with TestClient(http_app) as tc:
+        with pytest.raises(WebSocketDisconnect):
+            with tc.websocket_connect("/mcp"):
+                pass  # pragma: no cover - handshake must fail
+
+
+# ---- httpx clients are closed on shutdown ----
+
+
+def test_lifespan_closes_tenant_clients_on_shutdown(registry):
+    app = create_app(registry, bearer_token=BEARER)
+    with TestClient(app) as tc:
+        assert tc.get("/health").status_code == 200
+        assert all(not c._http.is_closed for c in registry.clients.values())
+    # TestClient exit runs the shutdown half of the lifespan.
+    assert all(c._http.is_closed for c in registry.clients.values())

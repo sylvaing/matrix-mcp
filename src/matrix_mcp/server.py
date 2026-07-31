@@ -20,11 +20,12 @@ Two transports:
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -49,6 +50,13 @@ class BearerAuthMiddleware:
       clients misclassify that header as an OAuth challenge and break.
     - Pure ASGI (not BaseHTTPMiddleware) so streaming responses pass through
       untouched.
+    - Every ASGI scope type is auth-checked, not just "http": websocket
+      handshakes carry the same headers and must present the same bearer
+      (rejected with a 1008 policy-violation close otherwise), and any scope
+      type this middleware doesn't understand is refused outright. Only
+      "lifespan" — server startup/shutdown, no client attached — passes
+      through unauthenticated. No route added later can accidentally sit in
+      front of this check.
     """
 
     def __init__(self, app: ASGIApp, token: str) -> None:
@@ -60,18 +68,36 @@ class BearerAuthMiddleware:
         self.app = app
         self._token = token.encode()
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] == "/health":
-            await self.app(scope, receive, send)
-            return
+    def _authorized(self, scope: Scope) -> bool:
         headers = dict(scope.get("headers") or [])
         auth = headers.get(b"authorization", b"")
-        ok = auth.startswith(b"Bearer ") and hmac.compare_digest(auth[7:], self._token)
-        if not ok:
+        return auth.startswith(b"Bearer ") and hmac.compare_digest(
+            auth[7:], self._token
+        )
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        scope_type = scope["type"]
+        if scope_type == "lifespan":
+            await self.app(scope, receive, send)
+            return
+        if scope_type == "http":
+            if scope["path"] == "/health" or self._authorized(scope):
+                await self.app(scope, receive, send)
+                return
             response = Response("unauthorized", status_code=401)
             await response(scope, receive, send)
             return
-        await self.app(scope, receive, send)
+        if scope_type == "websocket":
+            if self._authorized(scope):
+                await self.app(scope, receive, send)
+                return
+            # Reject the handshake: consume websocket.connect, close 1008.
+            await receive()
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        raise RuntimeError(
+            f"matrix-mcp: refusing unauthenticated ASGI scope type {scope_type!r}"
+        )
 
 
 def _sanitized_upstream_error(e: httpx.HTTPStatusError) -> ValueError:
@@ -126,6 +152,10 @@ def build_mcp(registry: TenantRegistry, *, primary_tenant: str | None = None) ->
     from matrix_mcp.tools import rooms as rooms_tools
     from matrix_mcp.tools import search as search_tools
     from matrix_mcp.tools import writes as writes_tools
+
+    # Fail fast on a malformed MATRIX_MCP_MAX_UPLOAD_BYTES — at boot, not at
+    # the first upload attempt hours later.
+    writes_tools.max_upload_bytes()
 
     primary = primary_tenant or registry.names()[0]
     if primary not in registry.clients:
@@ -452,11 +482,22 @@ def create_app(
     # Serve the MCP endpoint at exactly /mcp (no trailing-slash redirect) by
     # mounting the FastMCP app at root with its own internal path.
     mcp_asgi = mcp.http_app(transport="streamable-http", stateless_http=True, path="/mcp")
+
+    @contextlib.asynccontextmanager
+    async def _lifespan(app: Starlette) -> AsyncIterator[Any]:
+        # Delegate to the FastMCP lifespan, and close every tenant's httpx
+        # client on shutdown so connection pools don't leak.
+        try:
+            async with mcp_asgi.lifespan(app) as state:
+                yield state
+        finally:
+            await registry.aclose_all()
+
     return Starlette(
         routes=[
             Route("/health", _health),
             Mount("/", app=mcp_asgi),
         ],
         middleware=[Middleware(BearerAuthMiddleware, token=bearer_token)],
-        lifespan=mcp_asgi.lifespan,
+        lifespan=_lifespan,
     )

@@ -144,3 +144,31 @@ async def test_invite_user_bad_mxid(client, hs):
     with pytest.raises(ValueError, match="user_id"):
         await writes.invite_user(client, ROOM, "bob@example.org")
     assert hs.invites == []
+
+
+# ---- upload cap configuration ----
+
+def test_upload_cap_default():
+    assert writes.max_upload_bytes() == writes.DEFAULT_MAX_UPLOAD_BYTES
+
+
+def test_upload_cap_garbage_rejected(monkeypatch):
+    monkeypatch.setenv("MATRIX_MCP_MAX_UPLOAD_BYTES", "ten megabytes")
+    with pytest.raises(RuntimeError, match="MATRIX_MCP_MAX_UPLOAD_BYTES"):
+        writes.max_upload_bytes()
+
+
+@pytest.mark.parametrize("bad", ["0", "-1"])
+def test_upload_cap_nonpositive_rejected(monkeypatch, bad):
+    monkeypatch.setenv("MATRIX_MCP_MAX_UPLOAD_BYTES", bad)
+    with pytest.raises(RuntimeError, match="positive"):
+        writes.max_upload_bytes()
+
+
+def test_server_boot_fails_fast_on_bad_upload_cap(monkeypatch, registry):
+    """Misconfiguration must fail at startup, not at the first upload."""
+    from matrix_mcp.server import build_mcp
+
+    monkeypatch.setenv("MATRIX_MCP_MAX_UPLOAD_BYTES", "not-a-number")
+    with pytest.raises(RuntimeError, match="MATRIX_MCP_MAX_UPLOAD_BYTES"):
+        build_mcp(registry)

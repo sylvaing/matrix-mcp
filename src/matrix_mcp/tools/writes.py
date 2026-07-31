@@ -22,8 +22,28 @@ DEFAULT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _ROOM_PRESETS = ("private_chat", "trusted_private_chat", "public_chat")
 
 
-def _max_upload_bytes() -> int:
-    return int(os.environ.get("MATRIX_MCP_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES))
+def max_upload_bytes() -> int:
+    """Parse and validate MATRIX_MCP_MAX_UPLOAD_BYTES.
+
+    Called once at server startup (build_mcp) so a malformed value fails the
+    boot, and again per upload so tests and long-lived processes see the
+    current environment. Raises RuntimeError with a clear message on garbage.
+    """
+    raw = os.environ.get("MATRIX_MCP_MAX_UPLOAD_BYTES")
+    if raw is None:
+        return DEFAULT_MAX_UPLOAD_BYTES
+    try:
+        value = int(raw)
+    except ValueError:
+        raise RuntimeError(
+            f"MATRIX_MCP_MAX_UPLOAD_BYTES must be an integer number of bytes, "
+            f"got {raw!r}"
+        ) from None
+    if value <= 0:
+        raise RuntimeError(
+            f"MATRIX_MCP_MAX_UPLOAD_BYTES must be positive, got {value}"
+        )
+    return value
 
 
 async def send_reaction(
@@ -91,7 +111,7 @@ async def send_file(
     except Exception as e:
         raise ValueError(f"file_b64 is not valid base64: {e}") from None
     size = len(content)
-    cap = _max_upload_bytes()
+    cap = max_upload_bytes()
     if size > cap:
         raise ValueError(
             f"file too large ({size} bytes; max {cap}). "

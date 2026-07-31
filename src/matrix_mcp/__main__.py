@@ -33,7 +33,15 @@ def main() -> None:
         # httpx logs full request URLs (which contain room IDs) at INFO;
         # keep those out of the logs.
         logging.getLogger("httpx").setLevel(logging.WARNING)
-        build_mcp(registry, primary_tenant=primary).run(transport="stdio")
+        try:
+            build_mcp(registry, primary_tenant=primary).run(transport="stdio")
+        finally:
+            # Best-effort: close tenant httpx clients on the way out.
+            import asyncio
+            import contextlib as _ctx
+
+            with _ctx.suppress(Exception):
+                asyncio.run(registry.aclose_all())
         return
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
