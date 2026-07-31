@@ -30,10 +30,14 @@ def main() -> None:
     if transport == "stdio":
         # Log to stderr only — stdout is the MCP transport.
         logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stderr)
+        # httpx logs full request URLs (which contain room IDs) at INFO;
+        # keep those out of the logs.
+        logging.getLogger("httpx").setLevel(logging.WARNING)
         build_mcp(registry, primary_tenant=primary).run(transport="stdio")
         return
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     bearer = os.environ.get("MCP_BEARER_TOKEN", "")
     app = create_app(registry, bearer_token=bearer, primary_tenant=primary)
 
