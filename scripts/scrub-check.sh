@@ -59,19 +59,33 @@ scan() {
 }
 
 # --- built-in: credential shapes ---
-scan "matrix-access-token"   '\bs[y]t_[A-Za-z0-9_-]{8,}'
+# NOTE: no \b anchors here — macOS `git grep -E` is POSIX ERE without the
+# GNU \b extension, and an unsupported anchor silently matches nothing,
+# disabling the pattern on that platform. Use portable (^|[^…]) instead.
+scan "matrix-access-token"   '(^|[^A-Za-z0-9_])s[y]t_[A-Za-z0-9_-]{8,}'
 scan "private-key-block"     'BEGIN (RSA|EC|OPENSSH|DSA|PGP) [P]RIVATE KEY'
 scan "bearer-literal"        "Authorization['\"]?[[:space:]]*[:=][[:space:]]*['\"]Bearer [A-Za-z0-9+/_-]{16,}"
 
 # --- built-in: private-network shapes ---
-scan "tailnet-hostname"      '\bta[i]l[0-9a-f]{4,}\.ts\.net'
+scan "tailnet-hostname"      'ta[i]l[0-9a-f]{4,}\.ts\.net'
 scan "ts-net-hostname"       '[A-Za-z0-9-]+\.t[s]\.net'
-scan "cgnat-ip"              '\b100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}\b'
+scan "cgnat-ip"              '(^|[^0-9.])100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3}($|[^0-9])'
 
 # --- built-in: env hygiene ---
 if git ls-files | grep -xE '\.env|\.env\.[^e].*|.*/\.env' >/dev/null 2>&1; then
     echo "SCRUB FAIL [tracked-dotenv]: a .env file is tracked by git"
     git ls-files | grep -xE '\.env|\.env\.[^e].*|.*/\.env'
+    fail=1
+fi
+
+# --- built-in: commit identity allowlist ---
+# Guards against a stray local git identity (env vars override -c and config)
+# stamping personal details into public history.
+ALLOWED_IDENTITY='Rommy <255708385+cosmic-fire-eng@users.noreply.github.com>'
+if git log --all --format='%an <%ae>%n%cn <%ce>' | sort -u \
+        | grep -vxF "$ALLOWED_IDENTITY" > "$hits"; then
+    echo "SCRUB FAIL [commit-identity]: commits by an unexpected author/committer:"
+    cat "$hits"
     fail=1
 fi
 
