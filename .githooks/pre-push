@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Pre-push gate: block the push if the scrub check or the test suite fails.
+# Enable once per clone with:  git config core.hooksPath .githooks
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+echo "[pre-push] scrub gate…"
+bash scripts/scrub-check.sh
+
+echo "[pre-push] tests…"
+if command -v pytest >/dev/null 2>&1; then
+    pytest -q
+elif [[ -x .venv/bin/pytest ]]; then
+    .venv/bin/pytest -q
+else
+    echo "[pre-push] WARNING: pytest not found; tests skipped" >&2
+fi
