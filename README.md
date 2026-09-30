@@ -4,11 +4,11 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Matrix](
 
 **Highlights**
 
-- **11 tools** covering the everyday Matrix client surface (read, search, send, react, attach files, create rooms, invite, mark read).
+- **13 tools** covering the everyday Matrix client surface (read, search, list DMs, unread overview, send, react, attach files, create rooms, invite, mark read).
 - **Multi-homeserver ("tenants") from day one** — point it at a personal account and a work account on different homeservers; the tool names never change, you just pass `tenant="work"`.
 - **Two transports** — stdio for local clients (Claude Desktop, Claude Code) and streamable HTTP with mandatory bearer auth for shared/remote deployments.
 - **Safe-by-default writes** — every write tool supports `dry_run=true` previews, and message sends take an idempotency key (forwarded as the Matrix transaction ID) so retries can't double-send.
-- **Tested** — 127 tests against a mocked homeserver (~91% line coverage, CI on 3.11/3.12/3.13) plus an end-to-end suite that CI runs against a real dockerized Synapse.
+- **Tested** — 140 tests against a mocked homeserver (~91% line coverage, CI on 3.11/3.12/3.13) plus an end-to-end suite that CI runs against a real dockerized Synapse.
 
 **The one big limitation, up front: no end-to-end encryption.** This server is a plain HTTP client with no crypto state. In E2EE rooms it will see (and return) ciphertext, and server-side search cannot see into them at all. It works great for unencrypted rooms — which includes most bridged rooms (messenger-bridge portal rooms are unencrypted in common bridge configs), public/community rooms, and bot-oriented rooms. If your entire Matrix life is E2EE DMs, this is not the tool for you (yet — see [Roadmap](#roadmap)).
 
@@ -23,6 +23,8 @@ Every tool takes an optional `tenant` parameter. With one configured homeserver 
 | `matrix_list_room_members(room_id, limit, cursor, tenant?)` | Paginated joined-member list (MXID + display name). |
 | `matrix_get_recent_messages(room_id, limit, before_cursor, tenant?)` | Newest-first messages; pass the returned `next_cursor` back as `before_cursor` to page into history. |
 | `matrix_search_messages(search_term, room_id?, limit, tenant?)` | Server-side full-text search across joined rooms (or one room). |
+| `matrix_list_direct_messages(limit, cursor, unread_only, tenant?)` | 1:1 conversations from the account's `m.direct` map (as Element shows them): partner, unread counters, last-message preview; most recent first. |
+| `matrix_get_unread(limit, tenant?)` | Rooms and DMs with unread notifications (Element's badge counters) plus a last-message preview; most recent first. |
 | `matrix_send_message(room_id, body, dry_run, idempotency_key, tenant?)` | Plaintext send with preview + retry-safe transaction IDs. |
 | `matrix_send_reaction(room_id, target_event_id, emoji, dry_run, …)` | Add an emoji reaction to a message. |
 | `matrix_send_file(room_id, file_b64, filename, mime_type, msgtype, …)` | Upload + send an attachment (image/video/audio/file auto-detected from MIME type; size-capped, default 10 MiB). |
@@ -162,7 +164,7 @@ What this server does about it: writes are previewable (`dry_run`), reads never 
 
 - **No E2EE** (see top). Encrypted rooms list fine and show metadata, but message bodies are ciphertext and search can't index them.
 - **Search depends on your homeserver.** Synapse supports `/search`; some lighter homeservers implement it partially or not at all.
-- **No sync/push.** This is a request/response tool surface — your agent polls; it doesn't get woken up by new messages.
+- **No push.** This is a request/response tool surface — your agent polls; it doesn't get woken up by new messages. The two overview tools take a fresh, filtered, one-shot `/sync` snapshot on every call (`timeout=0`, `set_presence=offline`, no stored `since` token): they never long-poll, never flip the account's presence, and never mark anything as read.
 - **Plaintext `m.text` sends** — no Markdown/HTML formatting, threads, replies, or edits yet.
 - **Room IDs, not aliases.** Tools take `!room:server` IDs; resolve `#alias:server` first (e.g. via `matrix_list_joined_rooms` / `matrix_get_room_info`).
 
@@ -181,7 +183,7 @@ The main prior art is [mjknowles/matrix-mcp-server](https://github.com/mjknowles
 ```bash
 pip install -e '.[dev]'
 ruff check src tests
-pytest -q --cov=matrix_mcp        # 127 tests, no network needed
+pytest -q --cov=matrix_mcp        # 140 tests, no network needed
 git config core.hooksPath .githooks   # enables the pre-push scrub+test gate
 ```
 

@@ -52,8 +52,9 @@ def test_stdio_boots_and_lists_tools():
         send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         tools_resp = json.loads(proc.stdout.readline())
         names = {t["name"] for t in tools_resp["result"]["tools"]}
-        assert len(names) == 11
+        assert len(names) == 13
         assert "matrix_send_message" in names
+        assert {"matrix_list_direct_messages", "matrix_get_unread"} <= names
     finally:
         proc.terminate()
         proc.wait(timeout=10)

@@ -142,13 +142,14 @@ def _sanitized_upstream_error(e: httpx.HTTPStatusError) -> ValueError:
 
 
 def build_mcp(registry: TenantRegistry, *, primary_tenant: str | None = None) -> FastMCP:
-    """Register the 11 Matrix tools against a FastMCP instance.
+    """Register the 13 Matrix tools against a FastMCP instance.
 
     `primary_tenant` is used when a caller omits the `tenant` argument;
     defaults to the alphabetically first configured tenant.
     """
     # Import here so the tool modules stay import-safe without env config.
     from matrix_mcp.tools import messages as messages_tools
+    from matrix_mcp.tools import overview as overview_tools
     from matrix_mcp.tools import rooms as rooms_tools
     from matrix_mcp.tools import search as search_tools
     from matrix_mcp.tools import writes as writes_tools
@@ -449,8 +450,43 @@ def build_mcp(registry: TenantRegistry, *, primary_tenant: str | None = None) ->
             search_term=search_term, room_id=room_id, limit=limit,
         )
 
+    # ---- overview (one filtered /sync) ----
+
+    @mcp.tool(
+        name="matrix_list_direct_messages",
+        description=(
+            "List 1:1 direct-message conversations (from the account's m.direct "
+            "map, as Element shows them) with partner, unread counters and a "
+            "last-message preview, most recently active first. Read-only. "
+            + tenant_doc
+        ),
+    )
+    async def t_list_direct_messages(
+        limit: int = 50,
+        cursor: int = 0,
+        unread_only: bool = False,
+        tenant: str | None = None,
+    ) -> dict[str, Any]:
+        return await _call(
+            "matrix_list_direct_messages", tenant, overview_tools.list_direct_messages,
+            limit=limit, cursor=cursor, unread_only=unread_only,
+        )
+
+    @mcp.tool(
+        name="matrix_get_unread",
+        description=(
+            "Rooms and DMs with unread notifications (same counters as Element's "
+            "badges), each with a last-message preview, most recently active "
+            "first. Read-only: does not mark anything as read. " + tenant_doc
+        ),
+    )
+    async def t_get_unread(limit: int = 50, tenant: str | None = None) -> dict[str, Any]:
+        return await _call(
+            "matrix_get_unread", tenant, overview_tools.get_unread, limit=limit,
+        )
+
     logger.info(
-        "matrix-mcp ready tenants=%s primary=%r tools=11",
+        "matrix-mcp ready tenants=%s primary=%r tools=13",
         registry.names(), primary,
     )
     return mcp

@@ -59,6 +59,69 @@ def _event(i: int, room_id: str = "!room0:example.org") -> dict:
     }
 
 
+def _member(user_id: str, displayname: str | None) -> dict:
+    return {
+        "type": "m.room.member",
+        "state_key": user_id,
+        "sender": user_id,
+        "content": {"membership": "join", "displayname": displayname},
+    }
+
+
+# Filtered initial /sync as returned for MatrixClient.sync_overview():
+#   !dm_bob   — DM (in m.direct), 2 unread, most recent activity
+#   !dm_carol — DM, read, older; long body to exercise preview truncation
+#   !room0    — named group room, 5 unread incl. 1 mention
+#   !room1    — unnamed group room (name from heroes), read, encrypted last event
+#   m.direct also lists !dm_left, which is not joined any more
+SYNC_OVERVIEW = {
+    "next_batch": "s1",
+    "account_data": {"events": [{
+        "type": "m.direct",
+        "content": {
+            "@bob:example.org": ["!dm_bob:example.org", "!dm_left:example.org"],
+            "@carol:example.org": ["!dm_carol:example.org"],
+        },
+    }]},
+    "rooms": {"join": {
+        "!dm_bob:example.org": {
+            "summary": {"m.heroes": ["@bob:example.org"], "m.joined_member_count": 2},
+            "state": {"events": [_member("@bob:example.org", "Bob")]},
+            "timeline": {"events": [{
+                **_event(40, "!dm_bob:example.org"),
+                "content": {"msgtype": "m.text", "body": "tu es dispo ?"},
+            }]},
+            "unread_notifications": {"notification_count": 2, "highlight_count": 0},
+        },
+        "!dm_carol:example.org": {
+            "summary": {"m.heroes": ["@carol:example.org"], "m.joined_member_count": 2},
+            "state": {"events": [_member("@carol:example.org", "Carol")]},
+            "timeline": {"events": [{
+                **_event(10, "!dm_carol:example.org"),
+                "sender": "@carol:example.org",
+                "content": {"msgtype": "m.text", "body": "x" * 500},
+            }]},
+            "unread_notifications": {"notification_count": 0, "highlight_count": 0},
+        },
+        "!room0:example.org": {
+            "summary": {"m.joined_member_count": 3},
+            "state": {"events": [{"type": "m.room.name", "state_key": "", "content": {"name": "General"}}]},
+            "timeline": {"events": [_event(30)]},
+            "unread_notifications": {"notification_count": 5, "highlight_count": 1},
+        },
+        "!room1:example.org": {
+            "summary": {"m.heroes": ["@bob:example.org", "@carol:example.org"], "m.joined_member_count": 3},
+            "state": {"events": [_member("@bob:example.org", "Bob")]},
+            "timeline": {"events": [{
+                "event_id": "$enc1", "sender": "@bob:example.org", "type": "m.room.encrypted",
+                "content": {"algorithm": "m.megolm.v1.aes-sha2", "ciphertext": "..."},
+                "origin_server_ts": 1_700_000_000_020,
+            }]},
+        },
+    }},
+}
+
+
 class MockHomeserver:
     """Implements just enough of the Matrix C-S v3 API for the suite."""
 
@@ -70,6 +133,7 @@ class MockHomeserver:
         self.created_rooms: list[dict] = []
         self.invites: list[dict] = []
         self.requests: list[httpx.Request] = []
+        self.sync_params: list[dict] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -156,6 +220,10 @@ class MockHomeserver:
         if re.fullmatch(r"/_matrix/client/v3/rooms/[^/]+/invite", path) and method == "POST":
             self.invites.append(json.loads(request.content))
             return httpx.Response(200, json={})
+
+        if path == "/_matrix/client/v3/sync" and method == "GET":
+            self.sync_params.append(dict(request.url.params))
+            return httpx.Response(200, json=SYNC_OVERVIEW)
 
         if path == "/_matrix/client/v3/search" and method == "POST":
             payload = json.loads(request.content)

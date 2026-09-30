@@ -7,6 +7,7 @@ account on it). Tools take an optional `tenant` argument to pick which one.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -191,6 +192,41 @@ class MatrixClient:
             f"/_matrix/client/v3/rooms/{self._q(room_id)}/invite",
             json=body,
         )
+
+    async def sync_overview(self) -> dict[str, Any]:
+        """One-shot, heavily filtered initial /sync: per joined room, the name,
+        unread counters and the last message, plus the global `m.direct` map.
+
+        - `timeout=0`: return immediately, never long-poll.
+        - `set_presence=offline`: reading must not flip the account to "online".
+        - No `since`: stateless — every call is a fresh snapshot.
+        """
+        sync_filter = {
+            "presence": {"types": []},
+            "account_data": {"types": ["m.direct"]},
+            "room": {
+                "timeline": {"limit": 1, "types": ["m.room.message", "m.room.encrypted"]},
+                "state": {
+                    "lazy_load_members": True,
+                    "types": ["m.room.name", "m.room.canonical_alias", "m.room.member"],
+                },
+                "ephemeral": {"types": []},
+                "account_data": {"types": []},
+                "include_leave": False,
+            },
+        }
+        r = await self._http.get(
+            "/_matrix/client/v3/sync",
+            params={
+                "filter": json.dumps(sync_filter, separators=(",", ":")),
+                "timeout": 0,
+                "set_presence": "offline",
+            },
+            # An initial sync can be slow on large accounts, even filtered.
+            timeout=httpx.Timeout(90.0, connect=10.0),
+        )
+        r.raise_for_status()
+        return r.json()
 
     async def search(
         self, search_term: str, *, room_id: str | None = None, limit: int = 20

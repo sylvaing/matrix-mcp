@@ -25,6 +25,8 @@ EXPECTED_TOOLS = {
     "matrix_create_room",
     "matrix_invite_user",
     "matrix_search_messages",
+    "matrix_list_direct_messages",
+    "matrix_get_unread",
 }
 
 BEARER = "test-mcp-bearer-token"
@@ -47,7 +49,7 @@ def mcp(registry):
     return build_mcp(registry)
 
 
-async def test_all_eleven_tools_registered(mcp):
+async def test_all_thirteen_tools_registered(mcp):
     tools = await mcp.list_tools()
     names = {t.name for t in tools}
     assert names == EXPECTED_TOOLS
@@ -65,6 +67,14 @@ async def test_call_tool_over_mcp_happy(mcp):
     out = _payload(result)
     assert out["total"] == 5
     assert len(out["rooms"]) == 2
+
+
+async def test_call_overview_tools_over_mcp(mcp):
+    async with Client(mcp) as c:
+        dms = _payload(await c.call_tool("matrix_list_direct_messages", {"unread_only": True}))
+        unread = _payload(await c.call_tool("matrix_get_unread", {}))
+    assert [d["dm_user_id"] for d in dms["direct_messages"]] == ["@bob:example.org"]
+    assert unread["total_unread"] == 7
 
 
 async def test_call_send_message_over_mcp(mcp, hs):
