@@ -1,12 +1,12 @@
 {
   "manifest_version": "0.4",
   "name": "matrix-mcp",
-  "display_name": "Matrix / Element",
-  "version": "0.2.0",
+  "display_name": "Matrix Element",
+  "version": "0.2.1",
   "description": "Lire, chercher et envoyer des messages Matrix (Element) depuis Claude : salons, conversations 1to1, non-lus.",
-  "long_description": "Connecte Claude à votre compte Matrix via l'API client-serveur : liste des salons et des conversations 1to1, non-lus, lecture de l'historique, recherche plein texte, et (sur demande) envoi de messages, réactions, fichiers, création de salons et invitations.\n\nIl vous faut un **jeton d'accès** Matrix : dans Element → Paramètres → Aide et à propos → Avancé → Jeton d'accès. Il donne accès à votre compte comme un mot de passe ; il cesse de fonctionner si vous vous déconnectez de la session Element dont il provient.\n\n**Pas de chiffrement de bout en bout** : les salons chiffrés apparaissent mais leurs messages restent illisibles.",
+  "long_description": "Connecte Claude à votre compte Matrix via l'API client-serveur : liste des salons et des conversations 1to1, non-lus, lecture de l'historique, recherche plein texte, et (sur demande) envoi de messages, réactions, fichiers, création de salons et invitations.\n\nIl vous faut un **jeton d'accès** Matrix : dans Element → Paramètres → Aide et à propos → Avancé → Jeton d'accès. Il donne accès à votre compte comme un mot de passe ; il cesse de fonctionner si vous vous déconnectez de la session Element dont il provient.\n\n**Pas de chiffrement de bout en bout** : les salons chiffrés apparaissent mais leurs messages restent illisibles.\n\nFork de [cosmic-fire-eng/matrix-mcp](https://github.com/cosmic-fire-eng/matrix-mcp) (Rommy, licence MIT).",
   "author": {
-    "name": "Rommy (fork : Sylvain Garcia)",
+    "name": "Sylvain Garcia",
     "url": "https://github.com/sylvaing/matrix-mcp"
   },
   "repository": {
