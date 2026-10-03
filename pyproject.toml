@@ -1,6 +1,6 @@
 [project]
 name = "matrix-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "Multi-homeserver Matrix MCP server — read, search, and send messages in Matrix rooms from any MCP client"
 readme = "README.md"
 license = { text = "MIT" }

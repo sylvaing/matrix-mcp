@@ -11,3 +11,6 @@ __pycache__/
 htmlcov/
 # Optional local-only scrub patterns for scripts/scrub-check.sh
 .scrub-extra-patterns
+
+# Built Claude Desktop bundles
+dist/

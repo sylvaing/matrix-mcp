@@ -1,0 +1,20 @@
+# Ce qui n'a rien à faire chez l'utilisateur final. `.env` n'est PAS exclu par
+# défaut par `mcpb pack` (seuls `.env.local`/`.env.*.local` le sont) : on l'exclut.
+.env
+.env.example
+.venv/
+dist/
+tests/
+scripts/
+.github/
+.githooks/
+.claude/
+.pytest_cache/
+.ruff_cache/
+.coverage
+__pycache__/
+*.pyc
+*.egg-info/
+Dockerfile
+docker-compose.yml
+.gitignore

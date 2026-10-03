@@ -1,0 +1,133 @@
+{
+  "manifest_version": "0.4",
+  "name": "matrix-mcp",
+  "display_name": "Matrix / Element",
+  "version": "0.2.0",
+  "description": "Lire, chercher et envoyer des messages Matrix (Element) depuis Claude : salons, conversations 1to1, non-lus.",
+  "long_description": "Connecte Claude à votre compte Matrix via l'API client-serveur : liste des salons et des conversations 1to1, non-lus, lecture de l'historique, recherche plein texte, et (sur demande) envoi de messages, réactions, fichiers, création de salons et invitations.\n\nIl vous faut un **jeton d'accès** Matrix : dans Element → Paramètres → Aide et à propos → Avancé → Jeton d'accès. Il donne accès à votre compte comme un mot de passe ; il cesse de fonctionner si vous vous déconnectez de la session Element dont il provient.\n\n**Pas de chiffrement de bout en bout** : les salons chiffrés apparaissent mais leurs messages restent illisibles.",
+  "author": {
+    "name": "Rommy (fork : Sylvain Garcia)",
+    "url": "https://github.com/sylvaing/matrix-mcp"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sylvaing/matrix-mcp"
+  },
+  "homepage": "https://github.com/sylvaing/matrix-mcp",
+  "keywords": [
+    "matrix",
+    "element",
+    "chat",
+    "messagerie",
+    "synapse"
+  ],
+  "license": "MIT",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/matrix_mcp/__main__.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "--frozen",
+        "--no-dev",
+        "matrix-mcp",
+        "--stdio"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "TENANT_MAIN_BASE_URL": "${user_config.base_url}",
+        "TENANT_MAIN_USER_ID": "${user_config.user_id}",
+        "TENANT_MAIN_TOKEN": "${user_config.access_token}"
+      }
+    }
+  },
+  "user_config": {
+    "base_url": {
+      "type": "string",
+      "title": "Adresse du serveur Matrix",
+      "description": "L'adresse du homeserver (pas celle d'Element). Chez BlueMind : https://matrix.bluemind.net",
+      "default": "https://matrix.bluemind.net",
+      "required": true
+    },
+    "user_id": {
+      "type": "string",
+      "title": "Votre identifiant Matrix",
+      "description": "Visible dans Element → Paramètres → Général, de la forme @prenom.nom:bluemind.net",
+      "required": true
+    },
+    "access_token": {
+      "type": "string",
+      "title": "Jeton d'accès Matrix",
+      "description": "Element → Paramètres → Aide et à propos → Avancé → Jeton d'accès. Il donne accès à votre compte comme un mot de passe.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "tools": [
+    {
+      "name": "matrix_list_direct_messages",
+      "description": "Conversations 1to1 (comme dans Element) avec interlocuteur, non-lus et aperçu du dernier message, les plus récentes d'abord. Lecture seule."
+    },
+    {
+      "name": "matrix_get_unread",
+      "description": "Salons et 1to1 non lus (mêmes compteurs que les pastilles d'Element) avec aperçu du dernier message. Ne marque rien comme lu."
+    },
+    {
+      "name": "matrix_list_joined_rooms",
+      "description": "Liste paginée des salons rejoints : nom, sujet, chiffrement."
+    },
+    {
+      "name": "matrix_get_room_info",
+      "description": "Nom, sujet, alias, chiffrement et nombre de membres d'un salon."
+    },
+    {
+      "name": "matrix_list_room_members",
+      "description": "Membres d'un salon (identifiant Matrix et nom affiché), paginés."
+    },
+    {
+      "name": "matrix_get_recent_messages",
+      "description": "Derniers messages d'un salon, du plus récent au plus ancien, avec pagination dans l'historique."
+    },
+    {
+      "name": "matrix_search_messages",
+      "description": "Recherche plein texte côté serveur dans tous les salons rejoints, ou un seul."
+    },
+    {
+      "name": "matrix_send_message",
+      "description": "Envoie un message texte dans un salon (dry_run=true pour prévisualiser sans envoyer)."
+    },
+    {
+      "name": "matrix_send_reaction",
+      "description": "Ajoute une réaction emoji à un message."
+    },
+    {
+      "name": "matrix_send_file",
+      "description": "Envoie un fichier en pièce jointe dans un salon (10 Mio max par défaut)."
+    },
+    {
+      "name": "matrix_create_room",
+      "description": "Crée un salon (privé par défaut, public possible) et invite des membres."
+    },
+    {
+      "name": "matrix_invite_user",
+      "description": "Invite un utilisateur dans un salon existant."
+    },
+    {
+      "name": "matrix_mark_read",
+      "description": "Marque un salon comme lu jusqu'à un message (accusé de lecture visible par les autres)."
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  }
+}
